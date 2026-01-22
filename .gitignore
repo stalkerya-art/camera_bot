@@ -2,7 +2,6 @@
 
 # Секретные файлы и данные
 .env
-.env.*
 secrets/
 config_secret.json
 *.key
