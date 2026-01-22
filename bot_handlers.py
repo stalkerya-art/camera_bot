@@ -140,21 +140,6 @@ class BotHandlers:
 
 🤖 <b>IP Camera Bot</b>
 Бот для захвата изображений с IP-камер
-
-📋 <b>Доступные команды:</b>
-/start - Начало работы
-/help - Справка
-/cameras - Список камер
-/capture - Сделать снимок
-/stats - Статистика
-/chat_id - Получить ID чата
-"""
-        if self.scheduler:
-            welcome_text += """
-/schedule_start - Запустить автосбор
-/schedule_stop - Остановить автосбор
-/schedule_status - Статус расписания
-/schedule_set - Установить интервал
 """
 
         welcome_text += f"""
@@ -475,6 +460,36 @@ class BotHandlers:
                     stats_text += f"\n• Следующий запуск: {format_timestamp(self.scheduler.next_run)}"
         
         update.message.reply_text(stats_text, parse_mode='HTML')
+    def update_menu_command(self, update: Update, context: CallbackContext):
+        """Обновить меню команд (только для администраторов)"""
+        # Проверяем авторизацию
+        if not self.check_auth_and_reply(update):
+            return
+    
+        try:
+            # Обновляем команды
+            commands = [
+                BotCommand("start", "Начало работы"),
+                BotCommand("help", "Справка по боту"),
+                BotCommand("cameras", "Список камер"),
+                BotCommand("capture", "Сделать снимок"),
+                BotCommand("stats", "Статистика работы"),
+                BotCommand("chat_id", "Получить ID чата"),
+            ]
+        
+            if self.scheduler:
+                commands.extend([
+                    BotCommand("schedule_start", "Запустить автосбор"),
+                    BotCommand("schedule_stop", "Остановить автосбор"),
+                    BotCommand("schedule_status", "Статус расписания"),
+                    BotCommand("schedule_set", "Установить интервал"),
+                ])
+        
+            context.bot.set_my_commands(commands)
+            update.message.reply_text("✅ Меню команд успешно обновлено!", parse_mode='HTML')
+        
+        except Exception as e:
+           update.message.reply_text(f"❌ Ошибка обновления меню: {e}", parse_mode='HTML')
     
     def schedule_start(self, update: Update, context: CallbackContext):
         """Запуск расписания"""

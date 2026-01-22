@@ -1,4 +1,4 @@
-# config.py
+# config.py (упрощенная версия)
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -27,4 +27,9 @@ def load_config():
     }
     
     config['schedule'] = schedule_config
+    
+    # Настройки отключения команд
+    disabled_commands = os.getenv('DISABLED_COMMANDS', '').split(',')
+    config['disabled_commands'] = [cmd.strip().lower() for cmd in disabled_commands if cmd.strip()]
+    
     return config
