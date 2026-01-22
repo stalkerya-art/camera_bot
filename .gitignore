@@ -1,0 +1,308 @@
+# .gitignore для IP Camera Bot
+
+# Секретные файлы и данные
+.env
+.env.*
+secrets/
+config_secret.json
+*.key
+*.pem
+*.crt
+
+# Файлы с паролями и конфиденциальной информацией
+credentials.json
+passwords.txt
+config.local.py
+
+# Папка со скриншотами (сохраненные изображения с камер)
+screenshots/
+images/
+captures/
+snapshots/
+
+# Логи
+*.log
+logs/
+log/
+logfile*
+*.log.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Временные файлы
+tmp/
+temp/
+*.tmp
+*.temp
+
+# PyCharm project files
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Проект-специфичные
+# Исключаем файлы с настройками камер (могут содержать чувствительную информацию)
+camera_config.json
+cameras.json
+config.json
+
+# Исключаем папки с данными пользователей
+data/
+user_data/
+
+# Исключаем файлы с состоянием бота
+bot_state.json
+session.dat
+
+# Исключаем файлы с временными токенами
+*.token
+*.session
+
+# Исключаем файлы с бэкапами
+*.bak
+*.backup
+
+# Документация, сгенерированная автоматически
+docs/_build/
+
+# Файлы для разработки
+.devcontainer/
+docker-compose.override.yml
+
+# Файлы для тестирования
+test_output/
+test_results/
+
+# Файлы с настройками IDE
+.project
+.classpath
+.settings/
+
+# Файлы для систем контроля версий (кроме .git)
+.gitattributes
+.gitkeep
+
+# Файлы с зависимостями (если используете локальные пакеты)
+local_packages/
+
+# Файлы с метаданными
+*.meta
+
+# Файлы с настройками системы
+system_config/
+
+# Файлы с логами отладки
+debug.log
+error.log
+
+# Файлы с дампами памяти
+*.dump
+*.core
+
+# Файлы с профилированием
+*.prof
+*.line_profiler
+
+# Файлы с кэшем
+.cache/
+.cache/*
+
+# Файлы с миграциями БД (если будете использовать)
+migrations/
+alembic.ini
+
+# Файлы с загруженными медиа
+media/
+uploads/
+
+# Файлы с временными загрузками
+downloads_temp/
+
+# Файлы с бэкапами баз данных
+backup/
+*.backup.db
+
+# Файлы с результатами выполнения
+results/
+output/
+
+# Файлы с кэшем запросов
+cache/
+*.cache
+
+# Файлы с настройками прокси
+proxy_config.json
+
+# Файлы с SSL сертификатами
+ssl/
+certificates/
+
+# Файлы с пользовательскими плагинами
+plugins/
+custom_modules/
+
+# Файлы с переводами
+locale/
+*.mo
+*.po
+
+# Файлы с темами
+themes/
+
+# Файлы с аватарками/иконками
+avatars/
+icons/
+
+# Файлы с водяными знаками
+watermarks/
+
+# Файлы с шаблонами отчетов
+templates/compiled/
+
+# Файлы с кэшем шаблонов
+template_cache/
+
+# Файлы с настройками уведомлений
+notifications_config.json
+
+# Файлы с расписанием (могут содержать чувствительную информацию)
+schedule.json
+jobs.json
+
+# Файлы с метриками
+metrics/
+stats/
+
+# Файлы с архивами
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Файлы с дампами
+*.dump
+*.sql
+
+# Файлы с резервными копиями настроек
+config_backup/
+settings_backup/
+
+# Файлы для конкретной ОС
+# Для Windows
+*.exe
+*.msi
+*.bat
+*.cmd
+
+# Для Linux/Mac
+*.sh
+*.bash
