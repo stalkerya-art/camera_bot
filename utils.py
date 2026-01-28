@@ -1,5 +1,6 @@
 # utils.py
 import html
+import re
 from datetime import datetime
 
 def escape_html(text):

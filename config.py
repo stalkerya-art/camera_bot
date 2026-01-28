@@ -1,4 +1,4 @@
-# config.py (упрощенная версия)
+# config.py (обновленная версия)
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -17,16 +17,19 @@ def load_config():
         'bot_password': os.getenv('BOT_PASSWORD', ''),
     }
     
-    # Загрузка настроек расписания
-    schedule_config = {
-        'enabled': os.getenv('SCHEDULE_ENABLED', 'false').lower() == 'true',
-        'interval_minutes': int(os.getenv('SCHEDULE_INTERVAL', '60')),
-        'start_time': os.getenv('SCHEDULE_START', '08:00'),
-        'end_time': os.getenv('SCHEDULE_END', '22:00'),
-        'days_of_week': os.getenv('SCHEDULE_DAYS', '0,1,2,3,4,5,6').split(','),
-    }
+    # Загрузка настроек расписания в новом формате
+    schedule_enabled = os.getenv('SCHEDULE_ENABLED', 'false').lower() == 'true'
+    schedule_config = os.getenv('SCHEDULE_CONFIG')
     
-    config['schedule'] = schedule_config
+    # Если не указан новый формат, используем старый для обратной совместимости
+    if not schedule_config:
+        interval_minutes = int(os.getenv('SCHEDULE_INTERVAL', '60'))
+        schedule_config = interval_minutes
+    
+    config['schedule'] = {
+        'enabled': schedule_enabled,
+        'config': schedule_config
+    }
     
     # Настройки отключения команд
     disabled_commands = os.getenv('DISABLED_COMMANDS', '').split(',')

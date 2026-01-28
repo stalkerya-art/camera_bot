@@ -1,6 +1,7 @@
 # bot_handlers.py
 import logging
 import time
+import re
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
@@ -170,9 +171,10 @@ class BotHandlers:
 /schedule_start - Запустить автосбор
 /schedule_stop - Остановить автосбор
 /schedule_status - Статус расписания
-/schedule_set 60 - Установить интервал (в минутах)
+/schedule_set - Установить расписание (интервал, cron или время)
+/schedule_cron - Установить cron-расписание
+/schedule_times - Установить конкретное время
 """
-
         help_text += """
 <b>Поддерживаемые типы камер:</b>
 • HTTP/HTTPS (JPEG snapshot)
@@ -453,43 +455,13 @@ class BotHandlers:
         
         if self.scheduler:
             schedule_status = "🟢 Активно" if self.scheduler.is_running else "🔴 Остановлено"
+            schedule_info = self.scheduler.get_schedule_info()
             stats_text += f"\n<b>⏰ Расписание:</b>\n• Статус: {schedule_status}"
-            if self.scheduler.is_running:
-                stats_text += f"\n• Интервал: {self.scheduler.interval_minutes} минут"
-                if self.scheduler.next_run:
-                    stats_text += f"\n• Следующий запуск: {format_timestamp(self.scheduler.next_run)}"
+            stats_text += f"\n• Режим: {schedule_info}"
+            if self.scheduler.next_run:
+                stats_text += f"\n• Следующий запуск: {self.scheduler.get_next_run_info()}"
         
         update.message.reply_text(stats_text, parse_mode='HTML')
-    def update_menu_command(self, update: Update, context: CallbackContext):
-        """Обновить меню команд (только для администраторов)"""
-        # Проверяем авторизацию
-        if not self.check_auth_and_reply(update):
-            return
-    
-        try:
-            # Обновляем команды
-            commands = [
-                BotCommand("start", "Начало работы"),
-                BotCommand("help", "Справка по боту"),
-                BotCommand("cameras", "Список камер"),
-                BotCommand("capture", "Сделать снимок"),
-                BotCommand("stats", "Статистика работы"),
-                BotCommand("chat_id", "Получить ID чата"),
-            ]
-        
-            if self.scheduler:
-                commands.extend([
-                    BotCommand("schedule_start", "Запустить автосбор"),
-                    BotCommand("schedule_stop", "Остановить автосбор"),
-                    BotCommand("schedule_status", "Статус расписания"),
-                    BotCommand("schedule_set", "Установить интервал"),
-                ])
-        
-            context.bot.set_my_commands(commands)
-            update.message.reply_text("✅ Меню команд успешно обновлено!", parse_mode='HTML')
-        
-        except Exception as e:
-           update.message.reply_text(f"❌ Ошибка обновления меню: {e}", parse_mode='HTML')
     
     def schedule_start(self, update: Update, context: CallbackContext):
         """Запуск расписания"""
@@ -501,10 +473,13 @@ class BotHandlers:
             return
         
         self.scheduler.start()
+        schedule_info = self.scheduler.get_schedule_info()
+        next_run = self.scheduler.get_next_run_info()
+        
         update.message.reply_text(
             "✅ <b>Расписание запущено!</b>\n\n"
-            f"Интервал: {self.scheduler.interval_minutes} минут\n"
-            f"Следующий запуск: через {self.scheduler.interval_minutes} минут",
+            f"{schedule_info}\n"
+            f"Следующий запуск: {next_run}",
             parse_mode='HTML'
         )
     
@@ -530,14 +505,15 @@ class BotHandlers:
             return
         
         status = "🟢 Активно" if self.scheduler.is_running else "🔴 Остановлено"
-        next_run = format_timestamp(self.scheduler.next_run) if self.scheduler.next_run else "не запланировано"
+        next_run = self.scheduler.get_next_run_info()
+        schedule_info = self.scheduler.get_schedule_info()
         last_execution = format_timestamp(self.scheduler.last_execution) if self.scheduler.last_execution else "никогда"
         
         status_text = f"""
 <b>⏰ Статус расписания:</b>
 
 • Статус: {status}
-• Интервал: {self.scheduler.interval_minutes} минут
+• Режим: {schedule_info}
 • Следующий запуск: {next_run}
 • Всего выполнено: {self.scheduler.execution_count} раз
 • Последний запуск: {last_execution}
@@ -545,7 +521,165 @@ class BotHandlers:
         update.message.reply_text(status_text, parse_mode='HTML')
     
     def schedule_set(self, update: Update, context: CallbackContext):
-        """Установка интервала расписания"""
+        """Установка расписания (интервал, cron или время)"""
+        if not self.check_auth_and_reply(update):
+            return
+            
+        if not self.scheduler:
+            update.message.reply_text("❌ Планировщик не инициализирован", parse_mode='HTML')
+            return
+        
+        if not context.args:
+            update.message.reply_text(
+                "❌ Укажите параметры расписания\n\n"
+                "Примеры:\n"
+                "/schedule_set 60 - каждые 60 минут\n"
+                '/schedule_set "0 9-18 * * *" - с 9 до 18 каждый час\n'
+                '/schedule_set "09:00,13:00,18:00" - в указанное время',
+                parse_mode='HTML'
+            )
+            return
+        
+        try:
+            # Пробуем определить тип ввода
+            input_str = ' '.join(context.args)
+            
+            # Пробуем как число (интервал)
+            if input_str.isdigit():
+                schedule_config = int(input_str)
+            else:
+                # Пробуем как cron (5 частей)
+                parts = input_str.split()
+                if len(parts) == 5:
+                    schedule_config = input_str
+                else:
+                    # Пробуем как список времени
+                    if ',' in input_str:
+                        times = [t.strip() for t in input_str.split(',')]
+                    else:
+                        times = [input_str.strip()]
+                    schedule_config = times
+            
+            was_running = self.scheduler.is_running
+            self.scheduler.set_schedule(schedule_config)
+            
+            schedule_info = self.scheduler.get_schedule_info()
+            
+            if was_running:
+                message = f"✅ Расписание изменено: {schedule_info}\n\nРасписание продолжает работать"
+            else:
+                message = f"✅ Расписание изменено: {schedule_info}\n\nИспользуйте /schedule_start для запуска"
+            
+            update.message.reply_text(message, parse_mode='HTML')
+            
+        except Exception as e:
+            logger.error(f"Ошибка установки расписания: {e}")
+            update.message.reply_text(
+                f"❌ Ошибка установки расписания: {escape_html(str(e))}\n\n"
+                "Примеры:\n"
+                "/schedule_set 60 - каждые 60 минут\n"
+                '/schedule_set "0 9-18 * * *" - с 9 до 18 каждый час\n'
+                '/schedule_set "09:00,13:00,18:00" - в указанное время',
+                parse_mode='HTML'
+            )
+    
+    def schedule_cron(self, update: Update, context: CallbackContext):
+        """Установка cron-расписания"""
+        if not self.check_auth_and_reply(update):
+            return
+            
+        if not self.scheduler:
+            update.message.reply_text("❌ Планировщик не инициализирован", parse_mode='HTML')
+            return
+        
+        if not context.args:
+            update.message.reply_text(
+                "❌ Укажите cron-выражение\n\n"
+                "Формат: минута час день месяц день_недели\n"
+                "Примеры:\n"
+                "0 9 * * * - каждый день в 9:00\n"
+                "0 */2 * * * - каждые 2 часа\n"
+                "0 9-18 * * 1-5 - с 9 до 18 в рабочие дни\n"
+                "0,30 8-20 * * * - каждые 30 минут с 8 до 20",
+                parse_mode='HTML'
+            )
+            return
+        
+        try:
+            cron_expression = ' '.join(context.args)
+            was_running = self.scheduler.is_running
+            self.scheduler.set_schedule(cron_expression)
+            
+            schedule_info = self.scheduler.get_schedule_info()
+            
+            if was_running:
+                message = f"✅ Cron-расписание установлено: {schedule_info}\n\nРасписание продолжает работать"
+            else:
+                message = f"✅ Cron-расписание установлено: {schedule_info}\n\nИспользуйте /schedule_start для запуска"
+            
+            update.message.reply_text(message, parse_mode='HTML')
+            
+        except Exception as e:
+            logger.error(f"Ошибка установки cron: {e}")
+            update.message.reply_text(
+                f"❌ Ошибка установки cron: {escape_html(str(e))}\n\n"
+                "Формат: минута час день месяц день_недели\n"
+                "Пример: 0 9 * * *",
+                parse_mode='HTML'
+            )
+    
+    def schedule_times(self, update: Update, context: CallbackContext):
+        """Установка расписания по времени"""
+        if not self.check_auth_and_reply(update):
+            return
+            
+        if not self.scheduler:
+            update.message.reply_text("❌ Планировщик не инициализирован", parse_mode='HTML')
+            return
+        
+        if not context.args:
+            update.message.reply_text(
+                "❌ Укажите время в формате ЧЧ:ММ\n\n"
+                "Примеры:\n"
+                '/schedule_times "09:00" - в 9:00\n'
+                '/schedule_times "09:00,13:00,18:00" - в 9:00, 13:00 и 18:00',
+                parse_mode='HTML'
+            )
+            return
+        
+        try:
+            time_str = ' '.join(context.args)
+            times = [t.strip() for t in time_str.split(',')]
+            
+            # Проверяем формат времени
+            for t in times:
+                if not re.match(r'^\d{1,2}:\d{2}$', t):
+                    raise ValueError(f"Некорректный формат времени: {t}")
+            
+            was_running = self.scheduler.is_running
+            self.scheduler.set_schedule(times)
+            
+            schedule_info = self.scheduler.get_schedule_info()
+            
+            if was_running:
+                message = f"✅ Расписание по времени установлено: {schedule_info}\n\nРасписание продолжает работать"
+            else:
+                message = f"✅ Расписание по времени установлено: {schedule_info}\n\nИспользуйте /schedule_start для запуска"
+            
+            update.message.reply_text(message, parse_mode='HTML')
+            
+        except Exception as e:
+            logger.error(f"Ошибка установки времени: {e}")
+            update.message.reply_text(
+                f"❌ Ошибка установки времени: {escape_html(str(e))}\n\n"
+                "Примеры:\n"
+                '/schedule_times "09:00" - в 9:00\n'
+                '/schedule_times "09:00,13:00,18:00" - в 9:00, 13:00 и 18:00',
+                parse_mode='HTML'
+            )
+    
+    def schedule_set_interval(self, update: Update, context: CallbackContext):
+        """Установка интервала расписания (старый метод для обратной совместимости)"""
         if not self.check_auth_and_reply(update):
             return
             
@@ -567,7 +701,7 @@ class BotHandlers:
                 raise ValueError
                 
             was_running = self.scheduler.is_running
-            self.scheduler.set_interval(interval)
+            self.scheduler.set_schedule(interval)
             
             if was_running:
                 message = f"✅ Интервал изменен на {interval} минут\n\nРасписание продолжает работать"

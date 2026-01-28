@@ -26,14 +26,17 @@ def setup_scheduler(config, camera_manager, bot):
     except (ValueError, TypeError):
         logger.error(f"Неверный формат ADMIN_CHAT_ID: {config['admin_chat_id']}")
         return None
-    
-    # Создаем планировщик
+         
+    # Создаем планировщик с новым форматом
     scheduler = CameraScheduler(
         camera_manager=camera_manager,
         bot=bot,
         chat_id=admin_chat_id,
-        interval_minutes=config['schedule']['interval_minutes']
+        schedule_config=config['schedule']['config']
     )
+    if scheduler and config['schedule']['enabled']:
+        scheduler.start()
+        logger.info("Планировщик автоматически запущен")
     
     return scheduler
 
@@ -58,7 +61,9 @@ def setup_bot_commands(updater, scheduler, disabled_commands):
                 BotCommand("schedule_start", "Запустить автосбор"),
                 BotCommand("schedule_stop", "Остановить автосбор"),
                 BotCommand("schedule_status", "Статус расписания"),
-                BotCommand("schedule_set", "Установить интервал"),
+                BotCommand("schedule_set", "Установить расписание"),
+                BotCommand("schedule_cron", "Установить cron-расписание"),
+                BotCommand("schedule_times", "Установить время (ЧЧ:ММ,ЧЧ:ММ)"),
             ])
         
         # Фильтруем отключенные команды
@@ -74,6 +79,7 @@ def setup_bot_commands(updater, scheduler, disabled_commands):
     except Exception as e:
         logger.error(f"Ошибка при установке команд меню: {e}")
 
+# В функции register_handlers в main.py обновляем обработчики:
 def register_handlers(dp, bot_handlers, scheduler, disabled_commands):
     """Регистрация обработчиков команд с учетом отключенных"""
     global logger
@@ -104,6 +110,10 @@ def register_handlers(dp, bot_handlers, scheduler, disabled_commands):
             handlers.append(CommandHandler("schedule_status", bot_handlers.schedule_status))
         if "schedule_set" not in disabled_commands:
             handlers.append(CommandHandler("schedule_set", bot_handlers.schedule_set))
+        if "schedule_cron" not in disabled_commands:
+            handlers.append(CommandHandler("schedule_cron", bot_handlers.schedule_cron))
+        if "schedule_times" not in disabled_commands:
+            handlers.append(CommandHandler("schedule_times", bot_handlers.schedule_times))
     
     # Всегда добавляем обработчик для пароля (если не отключен start)
     if "start" not in disabled_commands:
@@ -166,7 +176,7 @@ def main():
     # Запуск бота
     logger.info("🤖 Бот запускается...")
     print("=" * 60)
-    print("🤖 IP Camera Bot с настройкой команд")
+    print("🤖 IP Camera Bot с гибким расписанием")
     print("=" * 60)
     print(f"Камер настроено: {len(camera_manager.cameras)}")
     
@@ -183,10 +193,11 @@ def main():
         print(f"🚫 Отключенные команды: {', '.join(disabled_commands)}")
     
     # Вывод информации о планировщике
-    if scheduler and scheduler.is_running:
-        print(f"Планировщик: 🟢 Активен (интервал: {scheduler.interval_minutes} мин)")
-    elif scheduler:
-        print("Планировщик: 🔴 Остановлен (используйте /schedule_start)")
+    if scheduler:
+        if scheduler.is_running:
+            print(f"Планировщик: 🟢 Активен ({scheduler.get_schedule_info()})")
+        else:
+            print(f"Планировщик: 🔴 Остановлен ({scheduler.get_schedule_info()})")
     elif "schedule" in disabled_commands:
         print("Планировщик: ⚫ Отключен (команда отключена в настройках)")
     else:
@@ -196,15 +207,17 @@ def main():
     print("\n📋 Доступные команды:")
     available_commands = ["start", "help", "chat_id", "cameras", "capture", "stats"]
     if scheduler and "schedule" not in disabled_commands:
-        available_commands.extend(["schedule_start", "schedule_stop", "schedule_status", "schedule_set"])
+        available_commands.extend(["schedule_start", "schedule_stop", "schedule_status", "schedule_set", "schedule_cron", "schedule_times"])
     
     for cmd in available_commands:
         if cmd not in disabled_commands:
             print(f"  /{cmd}")
     
     print("=" * 60)
-    print("ℹ️  Для отключения команд добавьте в .env:")
-    print('   DISABLED_COMMANDS="capture,schedule"')
+    print("ℹ️  Примеры расписания:")
+    print("   /schedule_set 60  - каждые 60 минут")
+    print('   /schedule_cron "0 9-18 * * *" - с 9 до 18 каждый час')
+    print('   /schedule_times "09:00,13:00,18:00" - в указанное время')
     print("=" * 60)
     
     # Запускаем polling

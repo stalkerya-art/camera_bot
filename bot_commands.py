@@ -23,7 +23,9 @@ def setup_bot_commands(bot, scheduler=None):
                 BotCommand("schedule_start", "Запустить автосбор"),
                 BotCommand("schedule_stop", "Остановить автосбор"),
                 BotCommand("schedule_status", "Статус расписания"),
-                BotCommand("schedule_set", "Установить интервал (минуты)"),
+                BotCommand("schedule_set", "Установить расписание"),
+                BotCommand("schedule_cron", "Установить cron-расписание"),
+                BotCommand("schedule_times", "Установить время"),
             ])
         
         # Устанавливаем команды бота
@@ -53,6 +55,8 @@ def update_commands_description():
 /schedule_start - Запустить автоматический сбор
 /schedule_stop - Остановить автоматический сбор
 /schedule_status - Показать статус расписания
-/schedule_set - Изменить интервал сбора (в минутах)
+/schedule_set - Установить расписание (интервал, cron или время)
+/schedule_cron - Установить cron-расписание
+/schedule_times - Установить конкретное время
 """
     return commands_info
