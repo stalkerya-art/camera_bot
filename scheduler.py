@@ -60,23 +60,31 @@ class CameraScheduler:
             self.mode = "interval"
             self.interval_minutes = config
             logger.info(f"Интервальный режим: {self.interval_minutes} минут")
-                    
+        
         elif isinstance(config, str):
             # Проверяем, является ли строкой cron-выражением
             if self._is_cron_expression(config):
-               self.mode = "cron"
-               self.cron_expression = config
-               self.cron_parts = self._parse_cron_expression(config)
-               logger.info(f"Cron-режим: {config}")
+                self.mode = "cron"
+                self.cron_expression = config
+                self.cron_parts = self._parse_cron_expression(config)
+                logger.info(f"Cron-режим: {config}")
             else:
-            # Разбиваем по пробелам или запятым
-                self.mode = "time_list"
-             # Разделяем по запятым или пробелам
+                # Если не cron, проверяем, есть ли запятые или пробелы
                 if ',' in config:
+                    # Разбиваем по запятым
+                    self.mode = "time_list"
                     self.time_list = [t.strip() for t in config.split(',') if t.strip()]
+                    logger.info(f"Режим списка времени (через запятые): {self.time_list}")
                 else:
+                    # Разбиваем по пробелам
+                    self.mode = "time_list"
                     self.time_list = [t.strip() for t in config.split() if t.strip()]
-                logger.info(f"Режим списка времени: {self.time_list}")
+                    logger.info(f"Режим списка времени (через пробелы): {self.time_list}")
+                
+        elif isinstance(config, list):
+            self.mode = "time_list"
+            self.time_list = config
+            logger.info(f"Режим списка времени: {self.time_list}")
         
                          
     def _is_cron_expression(self, expression: str) -> bool:
@@ -136,59 +144,54 @@ class CameraScheduler:
     def _calculate_next_run_time(self) -> Optional[datetime]:
         """Вычисляет время следующего запуска"""
         now = datetime.now()
+    
+        if self.mode == "time_list":
+            if not self.time_list:
+                logger.error("time_list пустой")
+                return None
         
-        if self.mode == "interval":
-            if self.last_execution:
-                return self.last_execution + timedelta(minutes=self.interval_minutes)
-            else:
-                return now + timedelta(minutes=self.interval_minutes)
+        logger.info(f"time_list: {self.time_list}")
+        logger.info(f"Текущее время: {now.strftime('%H:%M:%S')}")
         
-        elif self.mode == "cron":
-            # Ищем следующее время, соответствующее cron-выражению
-            # Начинаем со следующей минуты
-            next_time = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
-            
-            # Ищем ближайшее время, подходящее под cron
-            max_iterations = 365 * 24 * 60  # Максимум на год вперед
-            for _ in range(max_iterations):
-                if self._cron_matches_time(next_time):
-                    return next_time
-                next_time += timedelta(minutes=1)
-            
-            logger.error("Не удалось найти следующее время выполнения по cron")
+        # Преобразуем строки времени в объекты datetime
+        times_today = []
+        for time_str in self.time_list:
+            try:
+                hour, minute = map(int, time_str.split(':'))
+                time_dt = datetime.combine(now.date(), datetime.min.time()).replace(hour=hour, minute=minute)
+                times_today.append(time_dt)
+                logger.info(f"Добавлено время: {time_dt.strftime('%H:%M')}")
+            except (ValueError, AttributeError) as e:
+                logger.error(f"Некорректный формат времени '{time_str}': {e}")
+                continue
+        
+        if not times_today:
+            logger.error("Нет корректных времен в times_today")
             return None
         
-        elif self.mode == "time_list":
-            if not self.time_list:
-                return None
-            
-            # Преобразуем строки времени в объекты time
-            times_today = []
-            for time_str in self.time_list:
-                try:
-                    hour, minute = map(int, time_str.split(':'))
-                    times_today.append(datetime.combine(now.date(), datetime.min.time()).replace(hour=hour, minute=minute))
-                except (ValueError, AttributeError):
-                    logger.error(f"Некорректный формат времени: {time_str}")
-            
-            if not times_today:
-                return None
-            
-            # Ищем ближайшее время сегодня
-            times_today.sort()
-            for t in times_today:
-                if t > now:
-                    return t
-            
-            # Если все времена сегодня прошли, берем первое время завтра
-            tomorrow = now.date() + timedelta(days=1)
-            first_time = datetime.combine(tomorrow, datetime.min.time()).replace(
-                hour=times_today[0].hour,
-                minute=times_today[0].minute
-            )
-            return first_time
+        # Сортируем времена
+        times_today.sort()
         
-        return None
+        # Ищем ближайшее время, которое еще не наступило сегодня
+        for t in times_today:
+            logger.info(f"Проверяем время: {t.strftime('%H:%M')} > {now.strftime('%H:%M')}? {t > now}")
+            if t > now:
+                logger.info(f"Найдено следующее время: {t.strftime('%Y-%m-%d %H:%M')}")
+                return t
+        
+        # Если все времена сегодня прошли
+        logger.info(f"Все времена прошли, берем первое на завтра: {times_today[0].strftime('%H:%M')}")
+        tomorrow = now.date() + timedelta(days=1)
+        first_time = datetime.combine(tomorrow, datetime.min.time()).replace(
+            hour=times_today[0].hour,
+            minute=times_today[0].minute
+        )
+        return first_time
+    
+    # ... остальной код для других режимов
+    
+    
+    
     
     def start(self):
         """Запуск планировщика"""
@@ -237,12 +240,12 @@ class CameraScheduler:
     def _run(self):
         """Основной цикл планировщика"""
         logger.info(f"Планировщик начал работу в режиме '{self.mode}'")
-        
+    
         while self.is_running and not self.stop_event.is_set():
             try:
                 # Вычисляем время до следующего запуска
                 wait_seconds = self._calculate_wait_time()
-                
+            
                 if wait_seconds > 0:
                     # Ждем до следующего запуска с проверкой остановки
                     logger.info(f"До следующего запуска: {wait_seconds} секунд")
@@ -250,16 +253,17 @@ class CameraScheduler:
                         if self.stop_event.is_set():
                             return
                         time.sleep(1)
-                
-                # Выполняем захват
+            
+                # Выполняем захват (внутри него обновляется next_run)
                 self._execute_capture()
-                
-                # Обновляем время следующего запуска
-                self._update_next_run_time()
-                
+            
+                # УБРАЛИ ЭТУ СТРОКУ: self._update_next_run_time()
+            
             except Exception as e:
                 logger.error(f"Ошибка в планировщике: {e}")
                 time.sleep(60)
+    
+    
     
     def _calculate_wait_time(self) -> int:
         """Вычисление времени до следующего запуска"""
@@ -279,10 +283,11 @@ class CameraScheduler:
         if self.next_run:
             logger.info(f"Следующий запуск: {self.next_run.strftime('%Y-%m-%d %H:%M:%S')}")
     
+    
     def _execute_capture(self):
         """Выполнение захвата изображений и отправка в чат"""
         logger.info("Планировщик: запуск автоматического захвата")
-        
+    
         try:
             # Отправляем сообщение о начале
             start_message = self.bot.send_message(
@@ -291,15 +296,15 @@ class CameraScheduler:
                      f"Время: {datetime.now().strftime('%H:%M:%S')}",
                 parse_mode='HTML'
             )
-            
+        
             # Выполняем захват со всех камер
             results = self.camera_manager.capture_all()
-            
+        
             # Подсчитываем результаты и собираем успешные файлы
             successful = []
             failed = []
             media_group = []
-            
+        
             for i, result in enumerate(results):
                 if not result['error'] and os.path.exists(result.get('file_path', '')):
                     successful.append(result)
@@ -309,12 +314,13 @@ class CameraScheduler:
                         media_group.append(
                             InputMediaPhoto(
                                 media=photo,
-                                caption=result.get('camera_name', f'Камера {i+1}') if i == 0 else None
+                               # caption=result.get('camera_name', f'Камера {i+1}') if i == 0 else None
+                                caption=None
                             )
                         )
                 else:
                     failed.append(result)
-            
+        
             # Отправляем скриншоты одним сообщением (альбомом)
             if media_group:
                 try:
@@ -340,10 +346,17 @@ class CameraScheduler:
                             time.sleep(0.5)  # Небольшая задержка между отправками
                         except Exception as single_err:
                             logger.error(f"Ошибка при отправке одного фото: {single_err}")
-            
+        
+            # Обновляем статистику
+            self.execution_count += 1
+            self.last_execution = datetime.now()
+        
+            # Обновляем время следующего запуска
+            self._update_next_run_time()
+        
             # Отправляем итоговое сообщение
             result_text = f"<b>📊 Автозахват завершен</b>\n\n"
-            
+        
             if successful:
                 result_text += f"✅ Успешно: {len(successful)} камер\n"
             if failed:
@@ -353,29 +366,25 @@ class CameraScheduler:
                     result_text += f"   • {fail.get('camera_name', f'Камера {i+1}')}: {fail.get('error', 'Неизвестная ошибка')}\n"
                 if len(failed) > 5:
                     result_text += f"   ... и еще {len(failed) - 5} ошибок\n"
-            
+        
             result_text += f"\n⏱️ Время: {datetime.now().strftime('%H:%M:%S')}\n"
-            
+        
             # Добавляем информацию о следующем запуске
             if self.next_run:
                 next_run_str = self.next_run.strftime('%Y-%m-%d %H:%M:%S')
                 result_text += f"📅 Следующий запуск: {next_run_str}"
             else:
                 result_text += f"📅 Следующий запуск: не определено"
-            
+        
             self.bot.send_message(
                 chat_id=self.chat_id,
                 text=result_text,
                 parse_mode='HTML',
                 reply_to_message_id=start_message.message_id
             )
-            
-            # Обновляем статистику
-            self.execution_count += 1
-            self.last_execution = datetime.now()
-            
+        
             logger.info(f"Планировщик: захват завершен ({len(successful)} успешно, {len(failed)} ошибок)")
-            
+        
         except Exception as e:
             logger.error(f"Ошибка при автоматическом захвате: {e}")
             self.bot.send_message(
@@ -383,6 +392,10 @@ class CameraScheduler:
                 text=f"❌ <b>Ошибка при автоматическом захвате:</b>\n{str(e)[:100]}",
                 parse_mode='HTML'
             )
+    
+    
+    
+    
     
     def force_execute(self):
         """Принудительный запуск захвата"""
