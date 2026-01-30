@@ -15,6 +15,7 @@ def load_config():
         'retry_count': int(os.getenv('RETRY_COUNT', 3)),
         'admin_chat_id': os.getenv('ADMIN_CHAT_ID'),
         'bot_password': os.getenv('BOT_PASSWORD', ''),
+        'allowed_group_id': os.getenv('ALLOWED_GROUP_ID'),
     }
     
     # Загрузка настроек расписания в новом формате

@@ -16,6 +16,7 @@ class BotHandlers:
         self.camera_manager = camera_manager
         self.scheduler = scheduler
         self.bot_password = config.get('bot_password')
+        self.allowed_group_id = config.get('allowed_group_id')
         self.authorized_users = set()  # Для хранения авторизованных пользователей
         
         # Если пароль не установлен, добавляем всех пользователей
@@ -31,29 +32,55 @@ class BotHandlers:
         # Проверяем, есть ли пользователь в списке авторизованных
         return user_id in self.authorized_users
     
+    def is_chat_allowed(self, chat_id):
+        """Проверка разрешенного чата"""
+        if not self.allowed_group_id:
+            return True  # Если группа не указана, все чаты разрешены
+        return str(chat_id) == str(self.allowed_group_id)
+    
     def check_auth_and_reply(self, update: Update):
         """Проверка авторизации и отправка сообщения, если не авторизован"""
         if update.message:
+            chat = update.message.chat
             user = update.message.from_user
         elif update.callback_query:
+            chat = update.callback_query.message.chat
             user = update.callback_query.from_user
         else:
             return False
             
-        if not self.is_authorized(user.id):
+        # Проверка разрешенной группы
+        if not self.is_chat_allowed(chat.id):
             if update.message:
                 update.message.reply_text(
-                    "🔒 <b>Требуется авторизация</b>\n\n"
-                    "Для доступа к боту введите пароль:\n"
-                    "<code>/start ПАРОЛЬ</code>",
+                    "🚫 <b>Бот работает только в разрешенной группе</b>\n\n"
+                    f"ID этой группы: <code>{chat.id}</code>\n"
+                    f"Разрешенная группа: <code>{self.allowed_group_id}</code>",
                     parse_mode='HTML'
                 )
             elif update.callback_query:
                 update.callback_query.answer(
-                    "❌ Не авторизован. Введите /start для авторизации",
+                    "❌ Бот работает только в разрешенной группе",
                     show_alert=True
                 )
             return False
+            
+        # Проверка авторизации пользователя (только для личных сообщений)
+        if chat.type == 'private':
+            if not self.is_authorized(user.id):
+                if update.message:
+                    update.message.reply_text(
+                        "🔒 <b>Требуется авторизация</b>\n\n"
+                        "Для доступа к боту введите пароль:\n"
+                        "<code>/start ПАРОЛЬ</code>",
+                        parse_mode='HTML'
+                    )
+                elif update.callback_query:
+                    update.callback_query.answer(
+                        "❌ Не авторизован. Введите /start для авторизации",
+                        show_alert=True
+                    )
+                return False
         return True
     
     def start(self, update: Update, context: CallbackContext):
@@ -188,6 +215,11 @@ class BotHandlers:
             return
             
         chat = update.message.chat
+        
+        # Проверяем, разрешена ли эта группа
+        is_allowed = self.is_chat_allowed(chat.id)
+        allowed_status = "✅ Разрешена" if is_allowed else "❌ Не разрешена"
+        
         chat_info = f"""
 <b>📋 Информация о чате:</b>
 
@@ -195,10 +227,11 @@ class BotHandlers:
 🆔 <b>ID:</b> <code>{chat.id}</code>
 📁 <b>Тип:</b> {chat.type}
 🔗 <b>Username:</b> @{chat.username or 'нет'}
+🔒 <b>Статус доступа:</b> {allowed_status}
 
-💡 <b>Для настройки расписания:</b>
+💡 <b>Для настройки:</b>
 Добавьте в файл .env:
-<code>ADMIN_CHAT_ID={chat.id}</code>
+<code>ALLOWED_GROUP_ID={chat.id}</code>
 """
         update.message.reply_text(chat_info, parse_mode='HTML')
     

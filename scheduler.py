@@ -282,29 +282,34 @@ class CameraScheduler:
         self.next_run = self._calculate_next_run_time()
         if self.next_run:
             logger.info(f"Следующий запуск: {self.next_run.strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    
+
     def _execute_capture(self):
         """Выполнение захвата изображений и отправка в чат"""
         logger.info("Планировщик: запуск автоматического захвата")
-    
+
+        start_message = None  # Инициализируем переменную
         try:
             # Отправляем сообщение о начале
-            start_message = self.bot.send_message(
-                chat_id=self.chat_id,
-                text=f"<b>⏰ Автоматический захват запущен</b>\n"
-                     f"Время: {datetime.now().strftime('%H:%M:%S')}",
-                parse_mode='HTML'
-            )
-        
+            try:
+                start_message = self.bot.send_message(
+                    chat_id=self.chat_id,
+                    text=f"<b>⏰ Автоматический захват запущен</b>\n"
+                         f"Время: {datetime.now().strftime('%H:%M:%S')}",
+                    parse_mode='HTML'
+                )
+                logger.info("Начальное сообщение отправлено")
+            except Exception as e:
+                logger.warning(f"Не удалось отправить начальное сообщение: {e}")
+                start_message = None
+
             # Выполняем захват со всех камер
             results = self.camera_manager.capture_all()
-        
+
             # Подсчитываем результаты и собираем успешные файлы
             successful = []
             failed = []
             media_group = []
-        
+
             for i, result in enumerate(results):
                 if not result['error'] and os.path.exists(result.get('file_path', '')):
                     successful.append(result)
@@ -314,13 +319,12 @@ class CameraScheduler:
                         media_group.append(
                             InputMediaPhoto(
                                 media=photo,
-                               # caption=result.get('camera_name', f'Камера {i+1}') if i == 0 else None
                                 caption=None
                             )
                         )
                 else:
                     failed.append(result)
-        
+
             # Отправляем скриншоты одним сообщением (альбомом)
             if media_group:
                 try:
@@ -346,17 +350,17 @@ class CameraScheduler:
                             time.sleep(0.5)  # Небольшая задержка между отправками
                         except Exception as single_err:
                             logger.error(f"Ошибка при отправке одного фото: {single_err}")
-        
+
             # Обновляем статистику
             self.execution_count += 1
             self.last_execution = datetime.now()
-        
+
             # Обновляем время следующего запуска
             self._update_next_run_time()
-        
+
             # Отправляем итоговое сообщение
             result_text = f"<b>📊 Автозахват завершен</b>\n\n"
-        
+
             if successful:
                 result_text += f"✅ Успешно: {len(successful)} камер\n"
             if failed:
@@ -366,37 +370,48 @@ class CameraScheduler:
                     result_text += f"   • {fail.get('camera_name', f'Камера {i+1}')}: {fail.get('error', 'Неизвестная ошибка')}\n"
                 if len(failed) > 5:
                     result_text += f"   ... и еще {len(failed) - 5} ошибок\n"
-        
+
             result_text += f"\n⏱️ Время: {datetime.now().strftime('%H:%M:%S')}\n"
-        
+
             # Добавляем информацию о следующем запуске
             if self.next_run:
                 next_run_str = self.next_run.strftime('%Y-%m-%d %H:%M:%S')
                 result_text += f"📅 Следующий запуск: {next_run_str}"
             else:
                 result_text += f"📅 Следующий запуск: не определено"
-        
-            self.bot.send_message(
-                chat_id=self.chat_id,
-                text=result_text,
-                parse_mode='HTML',
-                reply_to_message_id=start_message.message_id
-            )
-        
+
+            # Отправляем итоговое сообщение без reply_to_message_id, если start_message не был отправлен
+            try:
+                if start_message:
+                    self.bot.send_message(
+                        chat_id=self.chat_id,
+                        text=result_text,
+                        parse_mode='HTML',
+                        reply_to_message_id=start_message.message_id
+                    )
+                else:
+                    self.bot.send_message(
+                        chat_id=self.chat_id,
+                        text=result_text,
+                        parse_mode='HTML'
+                    )
+            except Exception as e:
+                logger.error(f"Ошибка при отправке итогового сообщения: {e}")
+
             logger.info(f"Планировщик: захват завершен ({len(successful)} успешно, {len(failed)} ошибок)")
-        
+
         except Exception as e:
             logger.error(f"Ошибка при автоматическом захвате: {e}")
-            self.bot.send_message(
-                chat_id=self.chat_id,
-                text=f"❌ <b>Ошибка при автоматическом захвате:</b>\n{str(e)[:100]}",
-                parse_mode='HTML'
-            )
-    
-    
-    
-    
-    
+            try:
+                self.bot.send_message(
+                    chat_id=self.chat_id,
+                    text=f"❌ <b>Ошибка при автоматическом захвате:</b>\n{str(e)[:100]}",
+                    parse_mode='HTML'
+                )
+            except Exception as send_err:
+                logger.error(f"Не удалось отправить сообщение об ошибке: {send_err}")
+
+
     def force_execute(self):
         """Принудительный запуск захвата"""
         if self.is_running:

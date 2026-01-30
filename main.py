@@ -1,4 +1,3 @@
-# main.py
 import logging
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 from telegram import BotCommand
@@ -79,7 +78,6 @@ def setup_bot_commands(updater, scheduler, disabled_commands):
     except Exception as e:
         logger.error(f"Ошибка при установке команд меню: {e}")
 
-# В функции register_handlers в main.py обновляем обработчики:
 def register_handlers(dp, bot_handlers, scheduler, disabled_commands):
     """Регистрация обработчиков команд с учетом отключенных"""
     global logger
@@ -158,7 +156,11 @@ def main():
     camera_manager = CameraManager(config)
     
     # Инициализация бота
-    updater = Updater(config['token'], use_context=True)
+    request_kwargs = {
+    'read_timeout': 20,
+    'connect_timeout': 20,
+    }
+    updater = Updater(config['token'], use_context=True, request_kwargs=request_kwargs)
     dp = updater.dispatcher
     
     # Инициализация планировщика
@@ -184,6 +186,14 @@ def main():
         print(f"🔒 Авторизация: ВКЛЮЧЕНА (пароль: {config['bot_password']})")
     else:
         print("🔓 Авторизация: ОТКЛЮЧЕНА (доступ для всех)")
+    
+    # Вывод информации о разрешенной группе
+    if config['allowed_group_id']:
+        print(f"👥 Разрешенная группа: {config['allowed_group_id']}")
+        print("   Бот будет отвечать только в этой группе")
+    else:
+        print("👥 Разрешенная группа: не указана")
+        print("   Бот будет отвечать во всех чатах")
     
     # Устанавливаем меню команд
     setup_bot_commands(updater, scheduler, disabled_commands)
